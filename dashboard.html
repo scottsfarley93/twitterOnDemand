@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+
+  <!-- Always force latest IE rendering engine (even in intranet) & Chrome Frame 
+       Remove this if you use the .htaccess -->
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+
+  <title>dashboard</title>
+  <meta name="description" content="">
+  <meta name="author" content="Scott Farley">
+
+  <meta name="viewport" content="width=device-width; initial-scale=1.0">
+
+  <!-- Replace favicon.ico & apple-touch-icon.png in the root of your domain and delete these references -->
+  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  		<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+		<!-- Latest compiled and minified CSS -->
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous">
+
+<!-- Optional theme -->
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap-theme.min.css" integrity="sha384-fLW2N01lMqjakBkx3l/M9EahuwpSfeNvV63J5ezn3uZzapT0u7EYsXMjQV+0En5r" crossorigin="anonymous">
+<link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet/v0.7.7/leaflet.css" />
+<style>
+	.row{
+		height: 40%;
+		max-height: 40%;
+		margin-left: 1%;
+	#map{
+		height: 50%;
+		width: 50%;
+	}
+
+</style>
+</head>
+
+<body>
+  <div>
+    <header>
+      <h1 class='page-header'>Twitter Dashboard</h1>
+    </header>
+	<input type='text' placeholder='Search' id='searchBar'/><br />
+	<button id='searchBtn' class='btn btn-primary'>Search</button>
+	<button id='stopBtn' class='btn btn-alert'>Stop Stream</button> <br />
+	
+	<div class='row' id='row1'>
+		<div id='analytics' class='col-sm-6'>
+			<h4>Analytics</h4>
+			<strong class='text-muted'>Tweets per Second: </strong><span class='text-muted' id='tpmText'></span><br/>
+			<strong class='text-muted'>Stream Started: </strong><span class='text-muted' id='startTimeText'></span><br/>
+			<strong class='text-muted'>Elapsed Time: </strong><span class='text-muted' id='elapsedTimeText'></span><br/>
+			<strong class='text-muted'>Total Processed Tweets: </strong><span class='text-muted' id='processedTweetsText'></span><br/>
+			<strong class='text-muted'>Backlog: </strong><span class='text-muted' id='backlogText'></span><br/>
+		</div>
+		<div id='coords' class='col-sm-6'>
+			<h4>Geolocation</h4>
+			<div id='geolocationHolder'></div>
+		</div>
+	</div>
+	<div class='row' id='row2'>
+		<div class='col-sm-6' id='languages'>
+			<h4>Languages</h4>
+			<div id='languagesHolder'></div>
+		</div>
+		<div class='col-sm-6' id='hashtags'>
+			<h4>Hashtags</h4>
+			<div id='hashtagsHolder'></div>
+		</div>
+	</div>
+	<div id='row3' class='row'>
+		<div class='col-sm-6' id='sources'>
+			<h4>Tweet Source</h4>
+			<div id='platformsHolder'></div>
+		</div>
+		<div class='col-sm-6' id='timezones'>
+			<h4>User Timezone</h4>
+			<div id='timezoneHolder'></div>
+		</div>
+	</div>
+	<div id='row4' class='row'>
+		<div id='rawTweets' class='col-sm-6'>
+			<h4>Text</h4>
+		</div>
+		<div id='users' class='col-sm-6'>
+			<h4>User Name</h4>
+		</div>
+	</div>
+	<div id='row5' class='row'>
+		<div id='appLog' class='col-sm-6'>
+			<h4>Application Log</h4>
+		</div>
+		<div id='appPerf' class='col-sm-6'>
+			<h4>Application Performance</h4>
+		</div>
+	</div>
+	
+	
+	
+	
+	
+	
+    
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+<!-- Latest compiled and minified JavaScript -->
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js" ></script>
+<script src="http://cdn.leafletjs.com/leaflet/v0.7.7/leaflet.js"></script>
+<script src="//d3js.org/d3.v3.min.js" charset="utf-8"></script>
+
+    <footer>
+     <p>&copy; Copyright  by Scott Farley</p>
+    </footer>
+  </div>
+  <script>
+  
+  var looping; //global for main processing loop
+  var analytics = { //global object of interesting analytics
+  	tweetsPerMinute: 0,
+  	tweetsPerSecond: 0,
+  	hashTags :{},
+  	locations: {}
+  }
+  function log(message, c){
+  	var now = new Date().toUTCString()
+  	$("#appLog").append("<p>" + now + ": " + message + "</p>")
+  }
+  	$(document).ready(function(){
+
+  		function initializeStream(searchTerm){
+  			$.ajax({
+  				url: "start",
+  				error: function(error){
+  					log('Error!')
+  					console.log(error)
+  				},
+  				beforeSend: function(){
+  					log("Sending start request.")
+  				},
+  				type: "GET",
+  				dataType: "json",
+  				success: function(response){
+  					log("Got response message from stream starter.")
+  					s = response['success']
+  					if (s){
+  						log("Stream started successfully.")
+  						//second level of ajax call starts here
+  						$.ajax({
+  							url: "invisibleStream",
+  							data: {
+  								toTrack: searchTerm
+  							},
+  							beforeSend: function(){
+  								log("Sending track request for search term: " + searchTerm)
+  							},
+  							error: function(error){
+  								log('Error!')
+  								console.log(error)
+  							},
+  							type: "GET",
+  							dataType: "json",
+  							success: function(response){
+  								log("Got response message from tracking manager.")
+  								s = response['success']
+  								if (s){
+  									log("Tracking started successfully.")
+  									processLoop()
+  								}else{
+  									log(response['message'])
+  								}
+  							}
+  						})
+  					}else{
+  						log(response['message'])
+  					}
+  				}
+  			})
+  			
+  		}
+  		
+  		function processLoop(){
+  			looping = setInterval(function(){
+  				$.ajax({
+  					url: "pollStream",
+  					dataType: "json",
+  					type:"GET",
+  					error: function(error){
+  						log("Error getting new tweets from server.")
+  						console.log(error)
+  					},
+  					success: function(result){
+  						s = result['success']
+  						console.log(result)
+  						if (s){
+  							data = result['data']
+  							for (var i=0; i< data.length; i++){
+  								item = data[i]
+  								item = JSON.parse(item)
+  								console.log(item)
+  								text = item['text']
+  								user = item['user']['name']
+  								$("#rawTweets").append("<p>" + text + "</p>")
+  								$("#users").append("<p>" + user + "</p>")
+								str = ""
+  								if (item['user']['location'] != null){
+  									str += "<p>" + item['user']['location']
+  								}
+  								if (item['coordinates'] != null){
+  									str +=  ": " + item['coordinates']
+  								}
+  								if (str != ""){
+  									str += "</p>"
+  									$("#geolocationHolder").append(str)
+  								}
+  							
+  							
+  							}//end loop
+  							$("#hashtagsHolder").empty()
+  							for (var h =0; h<result['hashtags'].length; h++){
+  								hashtag = result['hashtags'][h]
+  								if (hashtag[0] != null){
+  									$("#hashtagsHolder").append("<p>" + hashtag[0] + ":" + hashtag[1] + "</p>")
+  							
+  								}
+  								
+  							}
+  							$("#platformsHolder").empty()
+  							for (p = 0; p<result['platforms'].length; p++){
+  								platform = result['platforms'][p]
+  								if (platform[0] != null){
+  									$("#platformsHolder").append("<p>" + platform[0] + ": " + platform[1] + "</p>")
+  								}
+  								
+  							}
+  							$("#languagesHolder").empty()
+  							
+  							for (var l=0; l < result['languages'].length; l++){
+  								language = result['languages'][l]
+  								if (language[0] != null){
+  									$("#languagesHolder").append("<p>" + language[0] + ": " + language[1] + "</p>")
+  								}
+  								
+  							}
+  							$("#timezoneHolder").empty()
+  							for (var t=0; t< result['timezones'].length; t++){
+  								timezone = result['timezones'][t]
+  								if (timezone[0] != null){
+  									$("#timezoneHolder").append("<p>" + timezone[0] + ":" + timezone[1] + "</p>")
+  								}
+  								
+  								
+  							}
+  							
+  							
+  							//basic analytics box
+  							tweetsPerMinute = data.length * 60
+  							analytics['tweetsPerMinute'] = tweetsPerMinute
+  							$("#tpmText").text(tweetsPerMinute)
+  							startedTime = result['status']['streamStarted']
+  							$("#startTimeText").text(startedTime)
+  							elapsedTime = result['status']['timeSinceInit']
+  							$("#elapsedTimeText").text(elapsedTime)
+  							$("#processedTweetsText").text(result['status']['processed'])
+  							$("#backlogText").text(result['status']['inQueue'])
+  							
+  							
+  						}
+  					}
+  				})
+  			}, 1000) //poll for new tweets every second
+  		}
+  		
+  		$("#searchBtn").click(function(){
+  			searchTerm = $("#searchBar").val()
+  			initializeStream(searchTerm)
+  		})
+  		function stopStream(){
+  			$.ajax({
+  				url: "close",
+  				beforeSend: function(){
+  					log("Closing stream on server.")
+  				},
+  				error: function(error){
+  					log("Error closing stream service.")
+  					console.log(error)
+  				},
+  				dataType: "json",
+  				type: "GET",
+  				success: function(result){
+  					if (result['success']){
+  						log("Closed stream successfully.")
+  					}else{
+  						log(result['message'])
+  					}
+  				}
+  			})
+  		} // end stop stream
+  		
+  	$("#stopBtn").click(function(){
+  		clearInterval(looping)
+  		stopStream()
+  	})
+  	}) //end doc.ready()
+  </script>
+</body>
+</html>
