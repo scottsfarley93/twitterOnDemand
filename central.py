@@ -7,17 +7,34 @@ import json
 import Queue
 import time
 import datetime
+import geograpy
+import requests
+import googleplaces
+import psycopg2
 
 
 
 ## application-wide auth/setup
 ## happens once per server init
+##twitter
 api_key = 	"s9XZr91SwqZbUpYbT9LNy0bJV"
 api_secret = "E2eugOjfxUFJWa9T5rsIU6MChRMRxUD8Xi5IN4m4EKSB3W7NWv"
 
 
 accessToken = "222614775-p921FcG0iwAnpIwYyKsHbVWyr3IqQ9TyeHZFc2wz"
 accessSecret = "fCvBReHfOD67MO7urbDipnrYxDJsZDWTgw4CLoqZjm1xP"
+
+##google places
+placeKey = "AIzaSyBK5agB1Jy3OSWC6xogj4guXM13fy1CcII"
+googlePlacesAPI = googleplaces.GooglePlaces(placeKey)
+
+##open an app-wide connection to the database
+database = "twitterOnDemand"
+username = "postgres"
+hostname = "localhost"
+password = "Sequoia93!"
+connectString = "dbname='" + str(database) + "' user='" + str(username) + "' host='" + str(hostname) + "' password='" + str(password) + "'"
+
 
 auth = tweepy.OAuthHandler(api_key, api_secret)
 auth.set_access_token(accessToken, accessSecret)
@@ -54,6 +71,11 @@ class analytics():
         if language not in self.languages:
             self.languages[language] = 0
         self.languages[language] += 1
+
+    def refreshLocations(self, location):
+        if location not in self.locations:
+            self.locations[location] = 0
+        self.locations[location] += 1
 
 
 
@@ -130,6 +152,7 @@ class App():
                 self.on = False
                 self.streaming = False
                 self.sessionQueue = None
+                self.analytics = analytics()
                 return json.dumps({"success":True, 'data':None, "message":'Stream session terminated.'})
             else:
                 return json.dumps({"success" : True, 'data':None, "message" : "Streaming already closed."})
@@ -171,13 +194,18 @@ class App():
         ## publishes all items currently in the queue as a json object
         # if not self.streaming:
         #     self.invisibleStart(toTrack) ##start streaming if not already
+        conn = psycopg2.connect(connectString)
+        cursor = conn.cursor()
         outArr = []
+        allPlaces = []
+        coords = []
         q = 0
         queueCopy = self.sessionQueue
         # for i in range(0, 100):
         #     queueCopy.put(i)
         self.totalCollectedTweets = self.numInQueue + self.numOutput
-        while queueCopy.qsize() > 0:
+        i = 0
+        while i < 6 and queueCopy.qsize() > 0:
             a =  queueCopy.get()
             outArr.append(a) ##puts the tweets into the raw output
             obj = json.loads(a)
@@ -186,8 +214,35 @@ class App():
             self.analytics.refreshPlatforms(obj['source'])
             self.analytics.refreshTimezones(obj['user']['time_zone'])
             self.analytics.refreshLanguages(obj['lang'])
-            q += 1
+            locationText = obj['user']['location']
+            if locationText is not None and "/" not in locationText and "&" not in locationText:
+                tweetPlaces = []
+                sql = '''SELECT "recordID", "resolvedTo", latitude, longitude, "rawText" FROM "Places" WHERE "rawText"='''
+                sql += "'" + locationText + "';"
+                cursor.execute(sql)
+                rows = cursor.fetchall()
+                for row in rows:
+                    tweetPlaces.append(row[4])
+                    coords.append([row[2], row[3]])
+                if len(rows) == 0:
+                    googleQuery = googlePlacesAPI.text_search(locationText)
+                    for place in googleQuery.places:
+                        sql = '''INSERT INTO "Places"("recordID", "resolvedTo", latitude, longitude, "rawText") VALUES '''
+                        sql += "(Default, '" + place.name + "'," + str(place.geo_location['lat']) + "," + str(place.geo_location['lng']) + ",'" + locationText + "');"
+                        cursor.execute(sql)
+                        tweetPlaces.append(place.name)
+                        coords.append([place.geo_location['lat'], place.geo_location['lng']])
+                try:
+                    theLocation = tweetPlaces[0] ##the first one
+                    self.analytics.refreshLocations(theLocation)
+                except:
+                    pass
+                q += 1
+                allPlaces.append(tweetPlaces)
+                i +=1
+        conn.commit()
         self.numOutput += q
+
 
         out = {
             "success" :True,
@@ -196,6 +251,8 @@ class App():
             "platforms" : sorted(self.analytics.platforms.items(), key=lambda x: x[1], reverse=True),
             "languages" : sorted(self.analytics.languages.items(), key=lambda x: x[1], reverse=True),
             'hashtags': sorted(self.analytics.hashtags.items(), key=lambda x: x[1], reverse=True),
+            "locations" : sorted(self.analytics.locations.items(), key=lambda x: x[1], reverse=True),
+            ##"coordinates" : coords,
             "status": {
                 "timeSinceInit" : str(self.getTimeSinceInit()),
                 "streaming" :str(self.streaming),
@@ -203,15 +260,28 @@ class App():
                 "streamStarted" : str(self.initTime),
                 "inQueue" : str(self.sessionQueue.qsize()),
                 "processed" :str(self.numOutput),
-                "totalCollected" : str(self.totalCollectedTweets)
+                "totalCollected" : str(self.totalCollectedTweets),
+                'elapsedSeconds': self.getTimeSinceInit().total_seconds(),
+                'avgTPS' : self.getAvgTPS()
+
             },
             "message": "Request fulfilled successfully.  Data is still streaming."
         }
+        conn.close()
         return json.dumps(out)
+
+    def getAvgTPS(self):
+        elapsedSeconds = self.getTimeSinceInit().total_seconds()
+        avgTPS = self.totalCollectedTweets / elapsedSeconds
+        return round(avgTPS, 2)
 
     @cherrypy.expose
     def dashboard(self):
         return open("dashboard.html")
+
+    # def processLocationQueue(self):
+    #     locationQueueCopy = self.sessionQueue
+    #     while locationQueueCopy.
 
 
 
@@ -237,6 +307,7 @@ class App():
             currentTime = datetime.datetime.now()
             self.timeSinceInit = currentTime - self.initTime
             print self.timeSinceInit
+            return self.timeSinceInit
         else:
             return 0
 

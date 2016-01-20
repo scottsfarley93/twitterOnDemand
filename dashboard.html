@@ -43,12 +43,15 @@
     </header>
 	<input type='text' placeholder='Search' id='searchBar'/><br />
 	<button id='searchBtn' class='btn btn-primary'>Search</button>
-	<button id='stopBtn' class='btn btn-alert'>Stop Stream</button> <br />
+	<button id='stopBtn' class='btn btn-alert'>Stop Stream</button> 
+	<button id='clearBtn' class='btn btn-warning'>Clear</button>
+	<br/>
 	
 	<div class='row' id='row1'>
 		<div id='analytics' class='col-sm-6'>
 			<h4>Analytics</h4>
 			<strong class='text-muted'>Tweets per Second: </strong><span class='text-muted' id='tpmText'></span><br/>
+			<strong class='text-muted'>Average Tweets per Second: </strong><span class='text-muted' id='avgtpmText'></span><br />
 			<strong class='text-muted'>Stream Started: </strong><span class='text-muted' id='startTimeText'></span><br/>
 			<strong class='text-muted'>Elapsed Time: </strong><span class='text-muted' id='elapsedTimeText'></span><br/>
 			<strong class='text-muted'>Total Processed Tweets: </strong><span class='text-muted' id='processedTweetsText'></span><br/>
@@ -82,9 +85,11 @@
 	<div id='row4' class='row'>
 		<div id='rawTweets' class='col-sm-6'>
 			<h4>Text</h4>
+			<div id='textHolder'></div>
 		</div>
 		<div id='users' class='col-sm-6'>
 			<h4>User Name</h4>
+			<div id='usersHolder'></div>
 		</div>
 	</div>
 	<div id='row5' class='row'>
@@ -199,19 +204,8 @@
   								console.log(item)
   								text = item['text']
   								user = item['user']['name']
-  								$("#rawTweets").append("<p>" + text + "</p>")
-  								$("#users").append("<p>" + user + "</p>")
-								str = ""
-  								if (item['user']['location'] != null){
-  									str += "<p>" + item['user']['location']
-  								}
-  								if (item['coordinates'] != null){
-  									str +=  ": " + item['coordinates']
-  								}
-  								if (str != ""){
-  									str += "</p>"
-  									$("#geolocationHolder").append(str)
-  								}
+  								$("#textHolder").append("<p>" + text + "</p>")
+  								$("#usersHolder").append("<p>" + user + "</p>")
   							
   							
   							}//end loop
@@ -250,21 +244,32 @@
   								
   								
   							}
+  							$("#geolocationHolder").empty()
+  							for(var t=0; t< result['locations'].length; t++){
+  								l = result['locations'][t]
+  								if (l[0] != null){
+  									$("#geolocationHolder").append("<p>" + l[0] + ":" + l[1] + "</p>")
+  								}
+  							}
   							
   							
   							//basic analytics box
-  							tweetsPerMinute = data.length * 60
-  							analytics['tweetsPerMinute'] = tweetsPerMinute
-  							$("#tpmText").text(tweetsPerMinute)
+  							tweetsPerSecond = data.length
+  							analytics['tweetsPerMinute'] = tweetsPerSecond
+  							$("#tpmText").text(tweetsPerSecond)
   							startedTime = result['status']['streamStarted']
   							$("#startTimeText").text(startedTime)
   							elapsedTime = result['status']['timeSinceInit']
   							$("#elapsedTimeText").text(elapsedTime)
   							$("#processedTweetsText").text(result['status']['processed'])
   							$("#backlogText").text(result['status']['inQueue'])
+  							$("#avgtpmText").text(result['status']['avgTPS'])
+ 
   							
-  							
-  						}
+  						}else{
+  							log(
+  								result['message']
+  							)  						}
   					}
   				})
   			}, 1000) //poll for new tweets every second
@@ -299,6 +304,24 @@
   	$("#stopBtn").click(function(){
   		clearInterval(looping)
   		stopStream()
+  	})
+  	
+  	$("#clearBtn").click(function(){
+  		clearInterval(looping)
+  		stopStream()
+  		$("#hashtagsHolder").empty()
+  		$("#timezoneHolder").empty()
+  		$("#backlogText").text("")
+  		$("#textHolder").empty()
+  		$("#usersHolder").empty()
+  		$("#languagesHolder").empty()
+  		$("#geolocationHolder").empty()
+  		$("#platformsHolder").empty()
+  		$("#processedTweetsText").empty()
+  		$("#elapsedTimeText").empty()
+  		$("#startTimeText").empty()
+  		$("#tpmText").empty()
+  		$("#avgtpmText").empty()
   	})
   	}) //end doc.ready()
   </script>
