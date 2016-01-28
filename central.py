@@ -215,32 +215,32 @@ class App():
             self.analytics.refreshTimezones(obj['user']['time_zone'])
             self.analytics.refreshLanguages(obj['lang'])
             locationText = obj['user']['location']
-            if locationText is not None and "/" not in locationText and "&" not in locationText:
-                tweetPlaces = []
-                sql = '''SELECT "recordID", "resolvedTo", latitude, longitude, "rawText" FROM "Places" WHERE "rawText"='''
-                sql += "'" + locationText + "';"
-                cursor.execute(sql)
-                rows = cursor.fetchall()
-                for row in rows:
-                    tweetPlaces.append(row[4])
-                    coords.append([row[2], row[3]])
-                if len(rows) == 0:
-                    googleQuery = googlePlacesAPI.text_search(locationText)
-                    for place in googleQuery.places:
-                        sql = '''INSERT INTO "Places"("recordID", "resolvedTo", latitude, longitude, "rawText") VALUES '''
-                        sql += "(Default, '" + place.name + "'," + str(place.geo_location['lat']) + "," + str(place.geo_location['lng']) + ",'" + locationText + "');"
-                        cursor.execute(sql)
-                        tweetPlaces.append(place.name)
-                        coords.append([place.geo_location['lat'], place.geo_location['lng']])
-                try:
-                    theLocation = tweetPlaces[0] ##the first one
-                    self.analytics.refreshLocations(theLocation)
-                except:
-                    pass
-                q += 1
-                allPlaces.append(tweetPlaces)
-                i +=1
-        conn.commit()
+            # if locationText is not None and "/" not in locationText and "&" not in locationText:
+            #     tweetPlaces = []
+            #     sql = '''SELECT "recordID", "resolvedTo", latitude, longitude, "rawText" FROM "Places" WHERE "rawText"='''
+            #     sql += "'" + locationText + "';"
+            #     cursor.execute(sql)
+            #     rows = cursor.fetchall()
+            #     for row in rows:
+            #         tweetPlaces.append(row[4])
+            #         coords.append([row[2], row[3]])
+            #     if len(rows) == 0:
+            #         googleQuery = googlePlacesAPI.text_search(locationText)
+            #         for place in googleQuery.places:
+            #             sql = '''INSERT INTO "Places"("recordID", "resolvedTo", latitude, longitude, "rawText") VALUES '''
+            #             sql += "(Default, '" + place.name + "'," + str(place.geo_location['lat']) + "," + str(place.geo_location['lng']) + ",'" + locationText + "');"
+            #             cursor.execute(sql)
+            #             tweetPlaces.append(place.name)
+            #             coords.append([place.geo_location['lat'], place.geo_location['lng']])
+            #     try:
+            #         theLocation = tweetPlaces[0] ##the first one
+            #         self.analytics.refreshLocations(theLocation)
+            #     except:
+            #         pass
+            q += 1
+                # allPlaces.append(tweetPlaces)
+            i +=1
+        # conn.commit()
         self.numOutput += q
 
 
