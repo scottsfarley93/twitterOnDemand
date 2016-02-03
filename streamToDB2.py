@@ -131,9 +131,12 @@ def sendToDB(i):
         queryString += "'" + mentionText + "',"
         queryString += "'" + symbolText + "',"
         queryString += "'" + str(now) + "');"
-        cursor = conn.cursor()
-        cursor.execute(queryString)
-        conn.commit()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(queryString)
+            conn.commit()
+        except:
+            pass
 
         ##Table structure
         ## recordID // can be used as a primary key
